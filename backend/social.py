@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session
 from db import run
 from psycopg2 import errors
-from sqlalchemy import true
+# from sqlalchemy import true
 
 bp = Blueprint("social", __name__, url_prefix="/api")
 
@@ -72,13 +72,16 @@ def unfollow(bid):
 def feed():
     uid = session.get("uid")
     rows = run(
-        """SELECT p.pin_id,p.title,p.image_filename,
+        """SELECT p.pin_id,
+                  COALESCE(p.source_url,'')       AS title,
+                  pic.uploaded_url                AS image_url,
                   b.board_id,b.name AS board_name,
                   u.user_id,u.username
            FROM follows f
            JOIN pins p   ON p.board_id=f.board_id
            JOIN boards b ON b.board_id=p.board_id
            JOIN users  u ON u.user_id=p.user_id
+           LEFT JOIN pictures pic ON pic.pin_id=p.pin_id
            WHERE f.user_id=%s
            ORDER BY p.pin_id DESC
            LIMIT 20""",
@@ -91,13 +94,18 @@ def feed():
 def search():
     q = f"%{request.args.get('q','')}%"
     rows = run(
-        """SELECT p.pin_id,p.title,p.description,p.image_filename,
-                  b.board_id,b.name AS board_name,
-                  u.user_id,u.username
-           FROM pins p
-           JOIN boards b ON p.board_id=b.board_id
-           JOIN users  u ON p.user_id=u.user_id
-           WHERE p.title ILIKE %s OR p.description ILIKE %s""",
+        """SELECT p.pin_id,
+                  COALESCE(p.source_url,'')   AS title,
+                  p.tags                      AS description,
+                  pic.uploaded_url            AS image_url,
+                  b.board_id, b.name AS board_name,
+                  u.user_id, u.username
+           FROM   pins p
+           JOIN   boards   b   ON b.board_id = p.board_id
+           JOIN   users    u   ON u.user_id  = p.user_id
+           LEFT   JOIN pictures pic ON pic.pin_id = p.pin_id
+           WHERE  p.tags       ILIKE %s
+              OR  p.source_url ILIKE %s""",
         (q, q),
     )
     return jsonify(rows)

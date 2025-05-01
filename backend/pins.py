@@ -13,8 +13,8 @@ def add_pin(bid):
     if not uid:
         return jsonify(error="unauth"), 401
 
-    title = request.form.get("title") or request.json.get("title", "")
-    desc = request.form.get("description") or request.json.get("description", "")
+    tags = request.form.get("tags") or request.json.get("tags", "")
+    src = request.form.get("source_url") or request.json.get("source_url", "")
     img_fname = None
 
     # Case A: file upload
@@ -43,22 +43,38 @@ def add_pin(bid):
     else:
         return jsonify(error="no image"), 400
 
-    pin = run(
-        """INSERT INTO pins (user_id,board_id,title,description,image_filename)
-           VALUES (%s,%s,%s,%s,%s)
+    pin_id = run(
+        """INSERT INTO pins (user_id,board_id,tags,source_url)
+           VALUES (%s,%s,%s,%s)
            RETURNING pin_id""",
-        (uid, bid, title, desc, img_fname),
+        (uid, bid, tags, src),
         fetchone=True,
         commit=True,
+    )["pin_id"]
+
+    # save disk-file path (or blob) into Pictures
+    run(
+        """INSERT INTO pictures (pin_id, image_blob, uploaded_url)
+           VALUES (%s, NULL, %s)""",
+        (pin_id, f"/static/uploads/{img_fname}"),
+        commit=True,
     )
+    pin = {"pin_id": pin_id}
+
     return jsonify(pin), 201
 
 
 @bp.get("/boards/<int:bid>/pins")
 def list_pins(bid):
     rows = run(
-        """SELECT pin_id,title,description,image_filename
-           FROM pins WHERE board_id=%s ORDER BY pin_id DESC""",
+        """SELECT p.pin_id,
+                  p.tags AS description,
+                  COALESCE(p.source_url,'') AS title,
+                  pic.uploaded_url AS image_url
+           FROM   pins p
+           LEFT JOIN pictures pic ON pic.pin_id = p.pin_id
+           WHERE  p.board_id=%s
+           ORDER BY p.pin_id DESC""",
         (bid,),
     )
     return jsonify(rows)
@@ -68,16 +84,34 @@ def list_pins(bid):
 def repin(pid):
     uid = session.get("uid")
     target = request.get_json().get("board_id")
-    pin = run("SELECT title,description,image_filename FROM pins WHERE pin_id=%s", (pid,), fetchone=True)
+
+    pin = run("""SELECT p.tags AS description,
+                p.source_url,
+                pic.uploaded_url
+        FROM   pins p
+        LEFT JOIN pictures pic ON pic.pin_id=p.pin_id
+        WHERE  p.pin_id=%s""",
+      (pid,), fetchone=True)
+    
     if not pin:
         return jsonify(error="not found"), 404
-    new_pin = run(
-        """INSERT INTO pins (user_id,board_id,title,description,image_filename,original_pin_id)
-           VALUES (%s,%s,%s,%s,%s,%s) RETURNING pin_id""",
-        (uid, target, pin["title"], pin["description"], pin["image_filename"], pid),
+    new_pin_id = run(
+        """INSERT INTO pins (user_id,board_id,tags,source_url,original_pin_id)
+           VALUES (%s,%s,%s,%s,%s) RETURNING pin_id""",
+        (uid, target, pin["description"], pin["source_url"], pid),
         fetchone=True,
         commit=True,
+    )["pin_id"]
+
+    # duplicate picture row so new pin_id has its own FK
+    run(
+        """INSERT INTO pictures (pin_id,image_blob,uploaded_url)
+           VALUES (%s,NULL,%s)""",
+        (new_pin_id, pin["uploaded_url"]),
+        commit=True,
     )
+    new_pin = {"pin_id": new_pin_id}
+
     return jsonify(new_pin), 201
 
 
