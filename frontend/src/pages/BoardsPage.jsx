@@ -7,7 +7,7 @@ export default function BoardsPage() {
   const [newB, setNewB] = useState({ name: "", description: "" });
 
   useEffect(() => {
-    API.get("/api/me")                      // optional endpoint ↔ adjust
+    API.get("/api/me")                      // fix on backend's auth
        .then(({ data }) => API.get(`/users/${data.id}/boards`))
        .then(res => setBoards(res.data));
   }, []);

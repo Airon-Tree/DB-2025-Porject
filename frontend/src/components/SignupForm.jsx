@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import API from "../api";
 import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 export default function SignupForm() {
   const [f, setF] = useState({ username: "", email: "", password: "" });
@@ -25,6 +26,10 @@ export default function SignupForm() {
       <input placeholder="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} />
       <input type="password" placeholder="password" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} />
       <button>Register</button>
+
+      <p style={{ marginTop: 12 }}>
+        Already registered? <Link to="/login">Log in</Link>
+      </p>
     </form>
   );
 }

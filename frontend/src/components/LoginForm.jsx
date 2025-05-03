@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import API from "../api";
 import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 export default function LoginForm({ onSuccess }) {
   const [email, setEmail] = useState("");
@@ -26,6 +27,10 @@ export default function LoginForm({ onSuccess }) {
       <input placeholder="email" value={email} onChange={e => setEmail(e.target.value)} />
       <input type="password" placeholder="password" value={password} onChange={e => setPassword(e.target.value)} />
       <button>Login</button>
+      <p style={{ marginTop: 12 }}>
+        Don't have an account?{" "}
+        <Link to="/signup">Sign up here</Link>
+      </p>
     </form>
   );
 }
