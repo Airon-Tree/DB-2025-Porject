@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}{{ board.name }} - PinBoard{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1>{{ board.name }}</h1>
+        <p class="text-muted">{{ board.description }}</p>
+        <p>
+            <a href="{{ url_for('frontend.user_profile', user_id=board.user_id) }}">{{ board.username }}</a> | 
+            <small class="text-muted">Created on {{ board.created_at.strftime('%b %d, %Y') }}</small>
+        </p>
+    </div>
+    <div class="col-md-4 text-end">
+        {% if user %}
+            {% if user.user_id == board.user_id %}
+                <a href="{{ url_for('frontend.create_pin', board_id=board.board_id) }}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Add Pin
+                </a>
+            {% else %}
+                <form method="POST" action="{{ url_for('frontend.toggle_follow', board_id=board.board_id) }}" class="d-inline">
+                    <button type="submit" class="btn btn-{{ 'danger' if is_following else 'success' }}">
+                        {% if is_following %}
+                            <i class="fas fa-minus"></i> Unfollow Board
+                        {% else %}
+                            <i class="fas fa-plus"></i> Follow Board
+                        {% endif %}
+                    </button>
+                </form>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+
+<div class="row" id="pins-container">
+    {% if pins %}
+        {% for pin in pins %}
+            <div class="col-sm-6 col-md-4 col-lg-3 mb-4">
+                <div class="card h-100">
+                    <a href="{{ url_for('frontend.view_pin', pin_id=pin.pin_id) }}">
+                        {% if pin.image_url %}
+                        <img src="{{ pin.image_url }}" class="card-img-top pin-image" alt="{{ pin.title }}">
+                        {% else %}
+                        <div class="card-img-top text-center bg-light py-5">
+                            <i class="fas fa-image fa-3x text-muted"></i>
+                        </div>
+                        {% endif %}
+                    </a>
+                    <div class="card-body">
+                        <h5 class="card-title">{{ pin.title if pin.title else "Untitled Pin" }}</h5>
+                        <p class="card-text text-truncate">{{ pin.description if pin.description else "" }}</p>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="col-12">
+            <div class="alert alert-info">
+                No pins found on this board yet.
+                {% if user and user.user_id == board.user_id %}
+                <a href="{{ url_for('frontend.create_pin', board_id=board.board_id) }}">Add your first pin</a>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

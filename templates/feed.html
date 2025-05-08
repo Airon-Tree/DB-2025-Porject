@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Your Feed - PinBoard{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Your Feed</h2>
+
+<div class="row" id="pins-container">
+    {% if pins %}
+        {% for pin in pins %}
+            <div class="col-sm-6 col-md-4 col-lg-3 mb-4">
+                <div class="card h-100">
+                    <a href="{{ url_for('frontend.view_pin', pin_id=pin.pin_id) }}">
+                        {% if pin.image_url %}
+                        <img src="{{ pin.image_url }}" class="card-img-top pin-image" alt="{{ pin.title }}">
+                        {% else %}
+                        <div class="card-img-top text-center bg-light py-5">
+                            <i class="fas fa-image fa-3x text-muted"></i>
+                        </div>
+                        {% endif %}
+                    </a>
+                    <div class="card-body">
+                        <h5 class="card-title">{{ pin.title if pin.title else "Untitled Pin" }}</h5>
+                    </div>
+                    <div class="card-footer bg-white">
+                        <small class="text-muted">
+                            <a href="{{ url_for('frontend.view_board', board_id=pin.board_id) }}">{{ pin.board_name }}</a> by 
+                            <a href="{{ url_for('frontend.user_profile', user_id=pin.user_id) }}">{{ pin.username }}</a>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="col-12">
+            <div class="alert alert-info">
+                <p>Your feed is empty! Start following some boards to see pins here.</p>
+                <a href="{{ url_for('frontend.index') }}" class="btn btn-primary">Discover Boards</a>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
