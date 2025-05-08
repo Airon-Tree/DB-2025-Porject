@@ -7,61 +7,164 @@ from config import UPLOAD_FOLDER
 bp = Blueprint("pins", __name__, url_prefix="/api")
 
 
-@bp.post("/boards/<int:bid>/pins")
-def add_pin(bid):
-    uid = session.get("uid")
-    if not uid:
-        return jsonify(error="unauth"), 401
+@bp.route("/boards/<int:board_id>/pins/new", methods=["GET", "POST"])
+def create_pin(board_id):
+    user = get_user()
+    board = run("SELECT * FROM boards WHERE board_id = %s", (board_id,), fetchone=True)
 
-    tags = request.form.get("tags") or request.json.get("tags", "")
-    src = request.form.get("source_url") or request.json.get("source_url", "")
-    img_fname = None
+    if not board:
+        flash("Board not found", "error")
+        return redirect(url_for("frontend.index"))
 
-    # Case A: file upload
-    if "image" in request.files and request.files["image"].filename:
-        f = request.files["image"]
-        if not allowed(f.filename):
-            return jsonify(error="bad type"), 400
-        img_fname = save_upload(f)
+    if request.method == "POST":
+        tags = request.form.get("tags", "")
+        source_url = request.form.get("source_url", "")
+        img_fname = None
 
-    # Case B: URL
-    elif request.json and request.json.get("image_url"):
-        url = request.json["image_url"]
         try:
-            r = requests.get(url, timeout=5)
-            r.raise_for_status()
-        except Exception:
-            return jsonify(error="url fetch failed"), 400
-        ext = url.split(".")[-1].split("?")[0]
-        if ext.lower() not in {"png", "jpg", "jpeg", "gif"}:
-            ext = "jpg"
-        import uuid, pathlib
+            # Handle uploaded image file
+            if "image" in request.files and request.files["image"].filename:
+                f = request.files["image"]
+                if not allowed(f.filename):
+                    flash("File type not allowed", "error")
+                    return render_template("pin/create.html", board=board, user=user)
+                img_fname = save_upload(f)
 
-        img_fname = f"{uuid.uuid4().hex}.{ext}"
-        (UPLOAD_FOLDER / img_fname).write_bytes(r.content)
+            # If no file uploaded, attempt download from URL
+            elif source_url:
+                import requests, uuid, os, re
+                from urllib.parse import urlparse
 
-    else:
-        return jsonify(error="no image"), 400
+                # Fix imgur gallery URLs
+                if 'imgur.com/gallery' in source_url or 'imgur.com/a/' in source_url:
+                    # Try to extract the image ID using regex
+                    match = re.search(r'([a-zA-Z0-9]{5,8})', source_url.split('/')[-1])
+                    if match:
+                        img_id = match.group(1)
+                        source_url = f'https://i.imgur.com/{img_id}.jpg'
 
-    pin_id = run(
-        """INSERT INTO pins (user_id,board_id,tags,source_url)
-           VALUES (%s,%s,%s,%s)
-           RETURNING pin_id""",
-        (uid, bid, tags, src),
-        fetchone=True,
-        commit=True,
-    )["pin_id"]
+                # Add headers to avoid rate limiting
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
 
-    # save disk-file path (or blob) into Pictures
-    run(
-        """INSERT INTO pictures (pin_id, image_blob, uploaded_url)
-           VALUES (%s, NULL, %s)""",
-        (pin_id, f"/static/uploads/{img_fname}"),
-        commit=True,
-    )
-    pin = {"pin_id": pin_id}
+                # Try to fetch the image with a timeout
+                try:
+                    r = requests.get(source_url, timeout=10, headers=headers)
+                    r.raise_for_status()
+                except requests.exceptions.HTTPError as http_err:
+                    if r.status_code == 429:
+                        flash(
+                            f"Failed to fetch image: Too many requests. Please try again later or use a different URL.",
+                            "error")
+                    else:
+                        flash(
+                            f"Failed to fetch image: {r.status_code} error. Please check the URL and try again.",
+                            "error")
+                    return render_template("pin/create.html", board=board, user=user)
+                except requests.exceptions.RequestException as req_err:
+                    flash(
+                        f"Failed to fetch image: {str(req_err)}. Please check the URL and try again.",
+                        "error")
+                    return render_template("pin/create.html", board=board, user=user)
 
-    return jsonify(pin), 201
+                # Improved extension parsing for complex URLs
+                try:
+                    # First check Content-Type for image type
+                    content_type = r.headers.get('Content-Type', '')
+                    if content_type.startswith('image/'):
+                        # Use content type to determine extension
+                        if 'image/jpeg' in content_type:
+                            ext = 'jpg'
+                        elif 'image/png' in content_type:
+                            ext = 'png'
+                        elif 'image/gif' in content_type:
+                            ext = 'gif'
+                        elif 'image/webp' in content_type:
+                            ext = 'webp'
+                        else:
+                            # Try to get from URL as fallback
+                            parsed_url = urlparse(source_url)
+                            path = parsed_url.path
+                            if '.' in path:
+                                url_ext = path.split('.')[-1].split('?')[0].lower()
+                                if url_ext in {"png", "jpg", "jpeg", "gif", "webp"}:
+                                    ext = 'jpg' if url_ext == 'jpeg' else url_ext
+                                else:
+                                    ext = 'jpg'  # Default if extension not recognized
+                            else:
+                                ext = 'jpg'  # Default if no extension in URL
+                    else:
+                        # Not an image content type, try to get extension from URL
+                        parsed_url = urlparse(source_url)
+                        path = parsed_url.path
+                        if '.' in path:
+                            url_ext = path.split('.')[-1].split('?')[0].lower()
+                            if url_ext in {"png", "jpg", "jpeg", "gif", "webp"}:
+                                ext = 'jpg' if url_ext == 'jpeg' else url_ext
+                            else:
+                                flash(
+                                    "URL does not appear to point to an image. Please use a direct image URL.",
+                                    "error")
+                                return render_template("pin/create.html", board=board,
+                                                       user=user)
+                        else:
+                            # No extension and not an image content type
+                            flash(
+                                "URL does not appear to point to an image. Please use a direct image URL.",
+                                "error")
+                            return render_template("pin/create.html", board=board,
+                                                   user=user)
+                except Exception:
+                    # Default to jpg on any error determining extension
+                    ext = 'jpg'
+
+                img_fname = f"{uuid.uuid4().hex}.{ext}"
+
+                try:
+                    with open(os.path.join(app.config['UPLOAD_FOLDER'], img_fname),
+                              "wb") as f:
+                        f.write(r.content)
+                except Exception as save_err:
+                    flash(f"Failed to save image: {str(save_err)}", "error")
+                    return render_template("pin/create.html", board=board, user=user)
+            else:
+                flash("Please provide an image", "error")
+                return render_template("pin/create.html", board=board, user=user)
+
+            # Insert new pin — auto-incrementing pin_id
+            pin = run(
+                """
+                INSERT INTO pins (user_id, board_id, tags, source_url)
+                VALUES (%s, %s, %s, %s)
+                RETURNING pin_id
+                """,
+                (user["user_id"], board_id, tags, source_url),
+                fetchone=True,
+                commit=True
+            )
+
+            # Link image to the pin
+            run(
+                """
+                INSERT INTO pictures (pin_id, image_blob, uploaded_url)
+                VALUES (%s, NULL, %s)
+                """,
+                (pin["pin_id"], f"/static/uploads/{img_fname}"),
+                commit=True
+            )
+
+            flash("Pin created successfully", "success")
+            return redirect(url_for("frontend.view_board", board_id=board_id))
+
+        except Exception as e:
+            print(f"Error creating pin: {str(e)}")
+            flash("An error occurred while creating your pin. Please try again later.",
+                  "error")
+            return render_template("pin/create.html", board=board, user=user)
+
+    return render_template("pin/create.html", board=board, user=user)
+
 
 
 @bp.get("/boards/<int:bid>/pins")

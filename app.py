@@ -4,8 +4,11 @@ from flask.cli import with_appcontext
 import os
 import click
 from werkzeug.security import generate_password_hash
-from psycopg2.extras import execute_values  # Make sure to add this import
+from psycopg2.extras import execute_values
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
 
 
 def create_app(test_config=None):
@@ -27,11 +30,20 @@ def create_app(test_config=None):
 
     # Initialize CORS with explicit configuration for API routes
     CORS(app,
-         resources={r"/api/*": {"origins": "http://localhost:3000"}},
+         resources={r"/api/*": {"origins": "*"}},
          supports_credentials=True)
 
-    # Initialize database
+    # Initialize database connection
     from db import init_pool, release_conn
+
+    # Set environment variables for database connection
+    os.environ['DB_NAME'] = os.environ.get('DB_NAME', 'pinboards')
+    os.environ['DB_USER'] = os.environ.get('DB_USER', 'postgres')
+    os.environ['DB_PASSWORD'] = os.environ.get('DB_PASSWORD', 'root')
+    os.environ['DB_HOST'] = os.environ.get('DB_HOST', 'localhost')
+    os.environ['DB_PORT'] = os.environ.get('DB_PORT', '5432')
+
+    # Initialize the connection pool without arguments
     init_pool()
     app.teardown_appcontext(release_conn)
 
@@ -216,62 +228,61 @@ def seed_db_command():
     try:
         print("Inserting test data...")
 
-        # 1. Users
+        # 1. Users (omit user_id)
         users_data = [
-            (1, 'erica', 'erica@example.com', generate_password_hash('hash_erica')),
-            (2, 'timmy', 'timmy@example.com', generate_password_hash('hash_timmy')),
-            (3, 'alice', 'alice@example.com', generate_password_hash('hash_alice')),
-            (4, 'bob', 'bob@example.com', generate_password_hash('hash_bob')),
-            (
-            5, 'charlie', 'charlie@example.com', generate_password_hash('hash_charlie'))
+            ('erica', 'erica@example.com', generate_password_hash('hash_erica')),
+            ('timmy', 'timmy@example.com', generate_password_hash('hash_timmy')),
+            ('alice', 'alice@example.com', generate_password_hash('hash_alice')),
+            ('bob', 'bob@example.com', generate_password_hash('hash_bob')),
+            ('charlie', 'charlie@example.com', generate_password_hash('hash_charlie'))
         ]
         execute_values(
             cursor,
-            "INSERT INTO Users (user_id, username, email, password_hash) VALUES %s",
+            "INSERT INTO Users (username, email, password_hash) VALUES %s",
             users_data,
-            template="(%s, %s, %s, %s)"
+            template="(%s, %s, %s)"
         )
 
-        # 2. Boards
+        # 2. Boards (omit board_id)
         boards_data = [
-            (1, 1, 'Furniture', 'Antique & modern pieces'),
-            (2, 1, 'Dream Vacations', 'Beaches and hidden gems'),
-            (3, 2, 'Super Dinosaurs', 'Everything T-Rex & friends'),
-            (4, 2, 'Pirates', 'Arrr! Ships, maps, treasure'),
-            (5, 3, 'Monsters', 'Creepy-cute creatures'),
-            (6, 4, 'Tech', 'Latest tech innovations'),
-            (7, 5, 'Nature Photography', 'Stunning landscapes and wildlife')
+            (1, 'Furniture', 'Antique & modern pieces'),
+            (1, 'Dream Vacations', 'Beaches and hidden gems'),
+            (2, 'Super Dinosaurs', 'Everything T-Rex & friends'),
+            (2, 'Pirates', 'Arrr! Ships, maps, treasure'),
+            (3, 'Monsters', 'Creepy-cute creatures'),
+            (4, 'Tech', 'Latest tech innovations'),
+            (5, 'Nature Photography', 'Stunning landscapes and wildlife')
         ]
         execute_values(
             cursor,
-            "INSERT INTO Boards (board_id, user_id, name, description) VALUES %s",
+            "INSERT INTO Boards (user_id, name, description) VALUES %s",
             boards_data,
-            template="(%s, %s, %s, %s)"
+            template="(%s, %s, %s)"
         )
 
-        # 3. Original Pins - Using raw SQL for CURRENT_TIMESTAMP
+        # 3. Pins – leave pin_id to auto-generate (adjust original_pin_id values if needed later)
         cursor.execute("""
-            INSERT INTO Pins (pin_id, user_id, board_id, tags, source_url, created_at) VALUES
-            (1, 1, 1, 'couch,brown,modern', 'https://example.com/sofa.jpg', CURRENT_TIMESTAMP),
-            (2, 1, 2, 'beach,sand,sea', 'https://example.com/beach.jpg', CURRENT_TIMESTAMP),
-            (3, 2, 3, 'dinosaur,trex', 'https://example.com/trex.png', CURRENT_TIMESTAMP),
-            (4, 2, 4, 'pirate,ship', 'https://example.com/pirate.png', CURRENT_TIMESTAMP),
-            (7, 3, 5, 'monster,cute', 'https://example.com/cute_monster.jpg', CURRENT_TIMESTAMP),
-            (8, 1, 2, 'mountain,alpine', 'https://example.com/alps.jpg', CURRENT_TIMESTAMP),
-            (9, 4, 6, 'phone,gadget', 'https://example.com/new_phone.png', CURRENT_TIMESTAMP),
-            (10, 5, 7, 'forest,sunrise', 'https://example.com/forest_sunrise.jpg', CURRENT_TIMESTAMP)
+            INSERT INTO Pins (user_id, board_id, tags, source_url, created_at) VALUES
+            (1, 1, 'couch,brown,modern', 'https://example.com/sofa.jpg', CURRENT_TIMESTAMP),
+            (1, 2, 'beach,sand,sea', 'https://example.com/beach.jpg', CURRENT_TIMESTAMP),
+            (2, 3, 'dinosaur,trex', 'https://example.com/trex.png', CURRENT_TIMESTAMP),
+            (2, 4, 'pirate,ship', 'https://example.com/pirate.png', CURRENT_TIMESTAMP),
+            (3, 5, 'monster,cute', 'https://example.com/cute_monster.jpg', CURRENT_TIMESTAMP),
+            (1, 2, 'mountain,alpine', 'https://example.com/alps.jpg', CURRENT_TIMESTAMP),
+            (4, 6, 'phone,gadget', 'https://example.com/new_phone.png', CURRENT_TIMESTAMP),
+            (5, 7, 'forest,sunrise', 'https://example.com/forest_sunrise.jpg', CURRENT_TIMESTAMP)
         """)
 
-        # Repins - Using raw SQL for CURRENT_TIMESTAMP
+        # 4. Repins
         cursor.execute("""
-            INSERT INTO Pins (pin_id, user_id, board_id, original_pin_id, created_at) VALUES
-            (5, 2, 4, 2, CURRENT_TIMESTAMP),  -- Timmy repins Erica's beach to Pirates
-            (6, 3, 5, 3, CURRENT_TIMESTAMP),  -- Alice repins Timmy's dinosaur to Monsters
-            (11, 5, 7, 2, CURRENT_TIMESTAMP), -- Charlie repins Erica's beach to Nature Photography
-            (12, 4, 6, 3, CURRENT_TIMESTAMP)  -- Bob repins Timmy's dinosaur to Tech Gadgets
+            INSERT INTO Pins (user_id, board_id, original_pin_id, created_at) VALUES
+            (2, 4, 2, CURRENT_TIMESTAMP),
+            (3, 5, 3, CURRENT_TIMESTAMP),
+            (5, 7, 2, CURRENT_TIMESTAMP),
+            (4, 6, 3, CURRENT_TIMESTAMP)
         """)
 
-        # 4. Pictures - Using raw SQL for CURRENT_TIMESTAMP
+        # 5. Pictures (omit pin_id here only if you're adding AFTER pins are inserted & fetched)
         cursor.execute("""
             INSERT INTO Pictures (pin_id, image_blob, original_url, uploaded_url, created_at) VALUES
             (1, '\\xDEADBEEF', 'https://example.com/sofa.jpg', NULL, CURRENT_TIMESTAMP),
@@ -284,52 +295,60 @@ def seed_db_command():
             (10, '\\xDEADBEEF', 'https://example.com/forest_sunrise.jpg', NULL, CURRENT_TIMESTAMP)
         """)
 
-        # 5. Friendships
+        # 6. Friendships (omit friendship_id)
         cursor.execute("""
-            INSERT INTO Friendships (friendship_id, requester_id, requested_id, status) VALUES
-            (1, 1, 2, 'accepted'), -- Erica ↔ Timmy
-            (2, 2, 3, 'accepted'), -- Timmy → Alice
-            (3, 3, 4, 'accepted'), -- Alice ↔ Bob
-            (4, 5, 1, 'pending')   -- Charlie → Erica (still pending)
+            INSERT INTO Friendships (requester_id, requested_id, status) VALUES
+            (1, 2, 'accepted'),
+            (2, 3, 'accepted'),
+            (3, 4, 'accepted'),
+            (5, 1, 'pending')
         """)
 
-        # 6. Follow Streams
+        # 7. Follow Streams (omit stream_id)
         cursor.execute(
-            "INSERT INTO FollowStreams (stream_id, user_id, name) VALUES (1, 2, 'Monsters and Dinosaurs')")
-
+            "INSERT INTO FollowStreams (user_id, name) VALUES (2, 'Monsters and Dinosaurs')"
+        )
         cursor.execute("""
             INSERT INTO FollowStreamBoards (stream_id, board_id) VALUES
             (1, 3), (1, 5), (1, 1), (1, 2)
         """)
-
         cursor.execute(
-            "INSERT INTO FollowStreams (stream_id, user_id, name) VALUES (2, 3, 'Design & Nature')")
-
+            "INSERT INTO FollowStreams (user_id, name) VALUES (3, 'Design & Nature')"
+        )
         cursor.execute("""
             INSERT INTO FollowStreamBoards (stream_id, board_id) VALUES
             (2, 1), (2, 7)
         """)
 
-        # 7. Likes
+        # 8. Likes (omit like_id)
         cursor.execute("""
-            INSERT INTO Likes (like_id, user_id, pin_id) VALUES
-            (1, 2, 1), -- Timmy like Erica's sofa
-            (2, 1, 3), -- Erica like Timmy's dinosaur
-            (3, 3, 2), -- Alice like Erica's beach
-            (4, 4, 7), -- Bob like Alice's monster
-            (5, 5, 8), -- Charlie like Erica's alps
-            (6, 1, 10)  -- Erica like Charlie's forest sunrise
+            INSERT INTO Likes (user_id, pin_id) VALUES
+            (2, 1),
+            (1, 3),
+            (3, 2),
+            (4, 7),
+            (5, 8),
+            (1, 10)
         """)
 
-        # 8. Comments
+        # 9. Comments (omit comment_id)
         cursor.execute("""
-            INSERT INTO Comments (comment_id, user_id, pin_id, comment_text) VALUES
-            (1, 2, 1, 'Cute couch!'),
-            (2, 1, 3, 'Awesome picture!'),
-            (3, 5, 8, 'Cool picture of the alps'),
-            (4, 4, 3, 'Amazing t-rex.'),
-            (5, 3, 10, 'Wish I was there')
+            INSERT INTO Comments (user_id, pin_id, comment_text) VALUES
+            (2, 1, 'Cute couch!'),
+            (1, 3, 'Awesome picture!'),
+            (5, 8, 'Cool picture of the alps'),
+            (4, 3, 'Amazing t-rex.'),
+            (3, 10, 'Wish I was there')
         """)
+
+        # Sync sequences
+        cursor.execute("SELECT setval('users_user_id_seq', (SELECT MAX(user_id) FROM users))")
+        cursor.execute("SELECT setval('boards_board_id_seq', (SELECT MAX(board_id) FROM boards))")
+        cursor.execute("SELECT setval('pins_pin_id_seq', (SELECT MAX(pin_id) FROM pins))")
+        cursor.execute("SELECT setval('friendships_friendship_id_seq', (SELECT MAX(friendship_id) FROM friendships))")
+        cursor.execute("SELECT setval('followstreams_stream_id_seq', (SELECT MAX(stream_id) FROM followstreams))")
+        cursor.execute("SELECT setval('likes_like_id_seq', (SELECT MAX(like_id) FROM likes))")
+        cursor.execute("SELECT setval('comments_comment_id_seq', (SELECT MAX(comment_id) FROM comments))")
 
         conn.commit()
         print("Test data inserted successfully!")
@@ -341,42 +360,14 @@ def seed_db_command():
         cursor.close()
 
 
+
 def register_cli_commands(app):
     """Register database functions with the Flask app."""
     app.cli.add_command(init_db_command)
     app.cli.add_command(seed_db_command)  # Add the new seed-db command
 
 
-def reset_all_sequences():
-    """Reset all sequences in the database to start after the highest existing ID."""
-    from db import run
-
-    tables_with_sequences = [
-        ('users', 'user_id'),
-        ('boards', 'board_id'),
-        ('pins', 'pin_id'),
-        ('friendships', 'friendship_id'),
-        ('followstreams', 'stream_id'),
-        ('likes', 'like_id'),
-        ('comments', 'comment_id')
-    ]
-
-    for table, id_column in tables_with_sequences:
-        try:
-            # Get the current maximum ID
-            result = run(f"SELECT MAX({id_column}) FROM {table}")
-            max_id = result[0][0] if result and result[0][0] else 0
-
-            # Reset the sequence to start after the maximum ID
-            sequence_name = f"{table}_{id_column}_seq"
-            run(f"ALTER SEQUENCE {sequence_name} RESTART WITH {max_id + 1}",
-                commit=True)
-            print(f"Reset {sequence_name} to start at {max_id + 1}")
-        except Exception as e:
-            print(f"Error resetting sequence for {table}.{id_column}: {e}")
-
 # This block is only executed when running this file directly
 if __name__ == "__main__":
     app = create_app()
-    reset_all_sequence()
     app.run(debug=True, host='0.0.0.0', port=5000)

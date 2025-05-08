@@ -6,22 +6,24 @@ from psycopg2 import errors
 bp = Blueprint("social", __name__, url_prefix="/api")
 
 
-def default_stream_id(uid: int) -> int:
-    """Return the stream_id for the user’s default follow stream,
-       creating it the first time."""
-    row = run(
-        "SELECT stream_id FROM followstreams "
-        "WHERE user_id=%s AND name='__default__'", (uid,), fetchone=True
+def default_stream_id(uid) -> int:
+    """Get or create the default stream for a user."""
+    # First, check if the default stream already exists
+    existing_stream = run(
+        "SELECT stream_id FROM followstreams WHERE user_id = %s AND name = '__default__'",
+        (uid,), fetchone=True
     )
-    if row:
-        return row["stream_id"]
 
-    # create and return
-    return run(
-        "INSERT INTO followstreams (user_id,name) "
-        "VALUES (%s,'__default__') RETURNING stream_id",
-        (uid,), fetchone=True, commit=True
-    )["stream_id"]
+    if existing_stream:
+        # Return the existing stream ID
+        return existing_stream["stream_id"]
+    else:
+        # Create a new default stream
+        new_stream = run(
+            "INSERT INTO followstreams (user_id, name) VALUES (%s, '__default__') RETURNING stream_id",
+            (uid,), fetchone=True, commit=True
+        )
+        return new_stream["stream_id"]
 
 
 @bp.post("/pins/<int:pid>/like")
