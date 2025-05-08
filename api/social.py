@@ -23,14 +23,27 @@ def default_stream_id(uid: int) -> int:
         (uid,), fetchone=True, commit=True
     )["stream_id"]
 
+
 @bp.post("/pins/<int:pid>/like")
-def like(pid):
+def toggle_like(pid):
     uid = session.get("uid")
-    try:
-        run("INSERT INTO likes (user_id,pin_id) VALUES (%s,%s)", (uid, pid), commit=True)
-    except errors.UniqueViolation:
-        pass
-    return jsonify(message="ok")
+    if not uid:
+        return jsonify(message="Login required"), 401
+
+    # Check if like already exists
+    existing = run("SELECT like_id FROM likes WHERE user_id = %s AND pin_id = %s",
+                   (uid, pid))
+
+    if existing:
+        # Unlike: Remove the existing like
+        run("DELETE FROM likes WHERE user_id = %s AND pin_id = %s", (uid, pid),
+            commit=True)
+        return jsonify(message="ok", action="unliked")
+    else:
+        # Like: Add new like - DON'T specify like_id, let PostgreSQL handle it
+        run("INSERT INTO likes (user_id, pin_id) VALUES (%s, %s)", (uid, pid),
+            commit=True)
+        return jsonify(message="ok", action="liked")
 
 
 @bp.delete("/pins/<int:pid>/like")

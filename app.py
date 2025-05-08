@@ -347,7 +347,36 @@ def register_cli_commands(app):
     app.cli.add_command(seed_db_command)  # Add the new seed-db command
 
 
+def reset_all_sequences():
+    """Reset all sequences in the database to start after the highest existing ID."""
+    from db import run
+
+    tables_with_sequences = [
+        ('users', 'user_id'),
+        ('boards', 'board_id'),
+        ('pins', 'pin_id'),
+        ('friendships', 'friendship_id'),
+        ('followstreams', 'stream_id'),
+        ('likes', 'like_id'),
+        ('comments', 'comment_id')
+    ]
+
+    for table, id_column in tables_with_sequences:
+        try:
+            # Get the current maximum ID
+            result = run(f"SELECT MAX({id_column}) FROM {table}")
+            max_id = result[0][0] if result and result[0][0] else 0
+
+            # Reset the sequence to start after the maximum ID
+            sequence_name = f"{table}_{id_column}_seq"
+            run(f"ALTER SEQUENCE {sequence_name} RESTART WITH {max_id + 1}",
+                commit=True)
+            print(f"Reset {sequence_name} to start at {max_id + 1}")
+        except Exception as e:
+            print(f"Error resetting sequence for {table}.{id_column}: {e}")
+
 # This block is only executed when running this file directly
 if __name__ == "__main__":
     app = create_app()
+    reset_all_sequence()
     app.run(debug=True, host='0.0.0.0', port=5000)
