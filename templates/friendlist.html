@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Friends • PinBoard{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">Friends</h2>
+
+<div class="row">
+  <!-- Friend List -->
+  <div class="col-lg-4 col-md-6 mb-4">
+    <h4>Friend List</h4>
+    {% if friends %}
+      <ul class="list-group">
+        {% for u in friends %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <a href="{{ url_for('frontend.user_profile', user_id=u.user_id) }}">{{ u.username }}</a>
+            <small class="text-muted">{{ u.created_at.strftime('%b %d, %Y') }}</small>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-muted">No friends yet.</p>
+    {% endif %}
+  </div>
+
+  <!-- Requests Sent -->
+  <div class="col-lg-4 col-md-6 mb-4">
+    <h4>Requests Sent</h4>
+    {% if sent %}
+      <ul class="list-group">
+        {% for u in sent %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <a href="{{ url_for('frontend.user_profile', user_id=u.user_id) }}">{{ u.username }}</a>
+            <small class="text-muted">{{ u.created_at.strftime('%b %d, %Y') }}</small>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-muted">No outgoing requests.</p>
+    {% endif %}
+  </div>
+
+  <!-- Invitations Received -->
+  <div class="col-lg-4 col-md-6 mb-4">
+    <h4>Invitations Received</h4>
+        {% if received %}
+            <ul class="list-group">
+                {% for u in received %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <a href="{{ url_for('frontend.user_profile', user_id=u.user_id) }}">{{ u.username }}</a>
+                            <small class="text-muted d-block">{{ u.created_at.strftime('%b %d, %Y') }}</small>
+                        </div>
+                        <form method="post"
+                                action="{{ url_for('frontend.accept_friend', fid=u.friendship_id) }}">
+                            <button class="btn btn-sm btn-success">Accept</button>
+                        </form>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="text-muted">No incoming requests.</p>
+        {% endif %}
+  </div>
+</div>
+{% endblock %}
+

@@ -14,10 +14,29 @@
                 <p class="text-muted">Member since {{ profile.created_at.strftime('%b %d, %Y') }}</p>
                 
                 <!-- Show friendship options if viewing another user's profile -->
+                <!-- ─── Friendship button / badge ─────────────────────────── -->
                 {% if user and user.user_id != profile.user_id %}
-                    <button class="btn btn-primary">
-                        <i class="fas fa-user-plus"></i> Add Friend
-                    </button>
+                    {% set f = friendship %}
+                    {% if not f %}
+                        <!-- no relationship yet -->
+                        <form method="post"
+                          action="{{ url_for('frontend.add_friend', target_id=profile.user_id) }}">
+                            <button class="btn btn-primary">
+                              <i class="fas fa-user-plus"></i> Add Friend
+                            </button>
+                        </form>
+                    {% elif f.status == 'accepted' %}
+                    <!-- already friends -->
+                    <form method="post"
+                        action="{{ url_for('frontend.remove_friend', target_id=profile.user_id) }}">
+                      <button class="btn btn-success">
+                        <i class="fas fa-user-check"></i> Remove Friend
+                      </button>
+                    </form>
+                    {% else %}
+                        <!-- pending -->
+                        <span class="badge bg-warning text-dark">Request Pending</span>
+                    {% endif %}
                 {% endif %}
             </div>
         </div>

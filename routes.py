@@ -148,8 +148,22 @@ def user_profile(user_id):
     )
 
     current_user = get_current_user()
+
+    friendship = None
+    if current_user and current_user["user_id"] != user_id:
+        friendship = run(
+            """SELECT status, requester_id
+            FROM friendships
+            WHERE (requester_id=%s AND requested_id=%s)
+                OR (requester_id=%s AND requested_id=%s)""",
+            (current_user["user_id"], user_id, user_id, current_user["user_id"]),
+            fetchone=True,
+        )
+
+
+
     return render_template('profile/view.html', profile=user, boards=boards,
-                           user=current_user)
+                           user=current_user, friendship=friendship)
 
 
 # Board view
@@ -364,6 +378,19 @@ def view_pin(pin_id):
     else:
         user_boards = []
 
+    # Check whether current user already follows this board
+    is_following = False
+    if user:
+        from api.social import default_stream_id
+        sid = default_stream_id(user["user_id"])
+        row = run(
+            "SELECT 1 FROM followstreamboards "
+            "WHERE stream_id=%s AND board_id=%s",
+            (sid, pin["board_id"]),
+            fetchone=True,
+        )
+        is_following = bool(row)
+
     return render_template(
         'pin/view.html',
         pin=pin,
@@ -371,7 +398,8 @@ def view_pin(pin_id):
         like_count=likes['like_count'],
         user_liked=user_liked,
         user_boards=user_boards,
-        user=user
+        user=user,
+        is_following=is_following
     )
 
 
@@ -561,3 +589,124 @@ def feed():
 
     user = get_current_user()
     return render_template('feed.html', pins=pins, user=user)
+
+
+# Add friend
+@frontend_bp.post("/friends/<int:target_id>/add")
+@login_required
+def add_friend(target_id):
+    # Send a friend‑request from the current user to target
+    me = session["uid"]
+    if me == target_id:
+        flash("You can’t friend yourself 🙃", "error")
+        return redirect(url_for("frontend.user_profile", user_id=target_id))
+
+    # If have any relationship?
+    rel = run(
+        """SELECT friendship_id,status,requester_id
+           FROM friendships
+           WHERE (requester_id=%s AND requested_id=%s)
+              OR (requester_id=%s AND requested_id=%s)""",
+        (me, target_id, target_id, me),
+        fetchone=True,
+    )
+
+    if rel:
+        flash("Already requested or friends", "info")
+    else:
+        run(
+            """INSERT INTO friendships (requester_id, requested_id, status)
+               VALUES (%s, %s, 'pending')""",
+            (me, target_id),
+            commit=True,
+        )
+        flash("Friend request sent 🎉", "success")
+
+    return redirect(url_for("frontend.user_profile", user_id=target_id))
+
+
+# Remove friend
+@frontend_bp.post("/friends/<int:target_id>/remove")
+@login_required
+def remove_friend(target_id):
+    # Delete friendship or pending request between the two users.
+    me = session["uid"]
+    run(
+        """DELETE FROM friendships
+           WHERE (requester_id=%s AND requested_id=%s)
+              OR (requester_id=%s AND requested_id=%s)""",
+        (me, target_id, target_id, me),
+        commit=True,
+    )
+    flash("Friend removed", "success")
+    return redirect(url_for("frontend.user_profile", user_id=target_id))
+
+# Three lists on one page: friends , sent requests , received invites
+@frontend_bp.route("/friends")
+@login_required
+def friend_list():
+    
+    me = session["uid"]
+
+    friends = run(
+        """
+        SELECT u.user_id, u.username, f.created_at
+        FROM   friendships f
+        JOIN   users u ON u.user_id = CASE
+                                        WHEN f.requester_id=%s
+                                        THEN f.requested_id ELSE f.requester_id END
+        WHERE  (f.requester_id=%s OR f.requested_id=%s)
+          AND  f.status='accepted'
+        ORDER  BY u.username
+        """,
+        (me, me, me),
+    )
+
+    sent = run(
+        """
+        SELECT u.user_id, u.username, f.created_at
+        FROM   friendships f
+        JOIN   users u ON u.user_id = f.requested_id
+        WHERE  f.requester_id=%s AND f.status='pending'
+        ORDER  BY f.created_at DESC
+        """,
+        (me,),
+    )
+
+    received = run(
+        """
+        SELECT u.user_id, u.username, f.created_at, f.friendship_id
+        FROM   friendships f
+        JOIN   users u ON u.user_id = f.requester_id
+        WHERE  f.requested_id=%s AND f.status='pending'
+        ORDER  BY f.created_at DESC
+        """,
+        (me,),
+    )
+
+    return render_template(
+        "friendlist.html",
+        friends=friends,
+        sent=sent,
+        received=received,
+        user=get_current_user(),
+    )
+
+
+# Accept a friend‑request
+@frontend_bp.post("/friends/<int:fid>/accept")
+@login_required
+def accept_friend(fid):
+
+    me = session["uid"]
+    run(
+        """UPDATE friendships
+              SET status = 'accepted'
+            WHERE friendship_id = %s
+              AND requested_id  = %s
+              AND status        = 'pending'""",
+        (fid, me),
+        commit=True,
+    )
+    flash("Friend request accepted ✅", "success")
+    return redirect(url_for("frontend.friend_list"))

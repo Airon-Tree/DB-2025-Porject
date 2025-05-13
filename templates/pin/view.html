@@ -111,11 +111,18 @@
                     <a href="{{ url_for('frontend.user_profile', user_id=pin.user_id) }}">{{ pin.username }}</a>
                 </p>
                 {% if user and user.user_id != pin.user_id %}
-                <form method="POST" action="{{ url_for('frontend.toggle_follow', board_id=pin.board_id) }}">
-                    <button type="submit" class="btn btn-sm btn-outline-primary">
-                        <i class="fas fa-plus"></i> Follow Board
-                    </button>
-                </form>
+                  <form method="POST"
+                        action="{{ url_for('frontend.toggle_follow', board_id=pin.board_id) }}">
+                    {% if is_following %}
+                        <button type="submit" class="btn btn-sm btn-success">
+                            <i class="fas fa-check"></i> Unfollow Board
+                        </button>
+                    {% else %}
+                        <button type="submit" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-plus"></i> Follow Board
+                        </button>
+                    {% endif %}
+                  </form>
                 {% endif %}
             </div>
         </div>
