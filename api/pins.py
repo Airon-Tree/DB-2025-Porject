@@ -1,8 +1,11 @@
 import requests
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, flash, redirect, url_for, \
+    render_template
 from db import run
 from utils import allowed, save_upload
 from config import UPLOAD_FOLDER
+import re, uuid, os
+from urllib.parse import urlparse
 
 bp = Blueprint("pins", __name__, url_prefix="/api")
 
@@ -17,9 +20,26 @@ def create_pin(board_id):
         return redirect(url_for("frontend.index"))
 
     if request.method == "POST":
+        title = request.form.get("title", "")
         tags = request.form.get("tags", "")
         source_url = request.form.get("source_url", "")
         img_fname = None
+
+        # Generate a title if not provided
+        if not title:
+            if tags:
+                # Use first tag as title
+                title = tags.split(',')[0].strip().capitalize()
+            elif source_url:
+                # Extract domain for title
+                domain_match = re.search(r'^(?:https?:\/\/)?(?:www\.)?([^\/]+)',
+                                         source_url)
+                if domain_match:
+                    title = f"Pin from {domain_match.group(1)}"
+                else:
+                    title = "Untitled Pin"
+            else:
+                title = "Untitled Pin"
 
         try:
             # Handle uploaded image file
@@ -32,9 +52,6 @@ def create_pin(board_id):
 
             # If no file uploaded, attempt download from URL
             elif source_url:
-                import requests, uuid, os, re
-                from urllib.parse import urlparse
-
                 # Fix imgur gallery URLs
                 if 'imgur.com/gallery' in source_url or 'imgur.com/a/' in source_url:
                     # Try to extract the image ID using regex
@@ -132,14 +149,14 @@ def create_pin(board_id):
                 flash("Please provide an image", "error")
                 return render_template("pin/create.html", board=board, user=user)
 
-            # Insert new pin — auto-incrementing pin_id
+            # Insert new pin with title — auto-incrementing pin_id
             pin = run(
                 """
-                INSERT INTO pins (user_id, board_id, tags, source_url)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO pins (user_id, board_id, title, tags, source_url)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING pin_id
                 """,
-                (user["user_id"], board_id, tags, source_url),
+                (user["user_id"], board_id, title, tags, source_url),
                 fetchone=True,
                 commit=True
             )
@@ -166,13 +183,17 @@ def create_pin(board_id):
     return render_template("pin/create.html", board=board, user=user)
 
 
-
 @bp.get("/boards/<int:bid>/pins")
 def list_pins(bid):
     rows = run(
         """SELECT p.pin_id,
                   p.tags AS description,
-                  COALESCE(p.source_url,'') AS title,
+                  COALESCE(p.title, 
+                           CASE 
+                             WHEN p.tags IS NOT NULL AND p.tags != '' THEN 
+                               SPLIT_PART(p.tags, ',', 1)
+                             ELSE COALESCE(p.source_url, 'Untitled Pin')
+                           END) AS title,
                   pic.uploaded_url AS image_url
            FROM   pins p
            LEFT JOIN pictures pic ON pic.pin_id = p.pin_id
@@ -188,33 +209,48 @@ def repin(pid):
     uid = session.get("uid")
     target = request.get_json().get("board_id")
 
-    pin = run("""SELECT p.tags AS description,
+    pin = run("""SELECT p.title,
+                p.tags AS description,
                 p.source_url,
                 pic.uploaded_url
         FROM   pins p
         LEFT JOIN pictures pic ON pic.pin_id=p.pin_id
         WHERE  p.pin_id=%s""",
-      (pid,), fetchone=True)
-    
+              (pid,), fetchone=True)
+
     if not pin:
         return jsonify(error="not found"), 404
+
+    # If no title in original pin, generate one from tags or source_url
+    title = pin.get("title")
+    if not title:
+        if pin.get("description"):
+            title = pin["description"].split(',')[0].strip().capitalize()
+        elif pin.get("source_url"):
+            domain_match = re.search(r'^(?:https?:\/\/)?(?:www\.)?([^\/]+)',
+                                     pin["source_url"])
+            if domain_match:
+                title = f"Pin from {domain_match.group(1)}"
+            else:
+                title = "Untitled Pin"
+        else:
+            title = "Untitled Pin"
+
     new_pin_id = run(
-        """INSERT INTO pins (user_id,board_id,tags,source_url,original_pin_id)
-           VALUES (%s,%s,%s,%s,%s) RETURNING pin_id""",
-        (uid, target, pin["description"], pin["source_url"], pid),
+        """INSERT INTO pins (user_id, board_id, title, tags, source_url, original_pin_id)
+           VALUES (%s, %s, %s, %s, %s, %s) RETURNING pin_id""",
+        (uid, target, title, pin["description"], pin["source_url"], pid),
         fetchone=True,
         commit=True,
     )["pin_id"]
 
     # duplicate picture row so new pin_id has its own FK
     run(
-        """INSERT INTO pictures (pin_id,image_blob,uploaded_url)
-           VALUES (%s,NULL,%s)""",
+        """INSERT INTO pictures (pin_id, image_blob, uploaded_url)
+           VALUES (%s, NULL, %s)""",
         (new_pin_id, pin["uploaded_url"]),
         commit=True,
     )
     new_pin = {"pin_id": new_pin_id}
 
     return jsonify(new_pin), 201
-
-

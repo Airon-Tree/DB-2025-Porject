@@ -133,6 +133,7 @@ def init_db_command(drop):
             user_id INT NOT NULL,
             board_id INT NOT NULL,
             original_pin_id INT,
+            title VARCHAR(255) NOT NULL,
             tags TEXT,
             source_url VARCHAR(255),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -260,26 +261,26 @@ def seed_db_command():
             template="(%s, %s, %s)"
         )
 
-        # 3. Pins – leave pin_id to auto-generate (adjust original_pin_id values if needed later)
+        # 3. Pins with titles
         cursor.execute("""
-            INSERT INTO Pins (user_id, board_id, tags, source_url, created_at) VALUES
-            (1, 1, 'couch,brown,modern', 'https://example.com/sofa.jpg', CURRENT_TIMESTAMP),
-            (1, 2, 'beach,sand,sea', 'https://example.com/beach.jpg', CURRENT_TIMESTAMP),
-            (2, 3, 'dinosaur,trex', 'https://example.com/trex.png', CURRENT_TIMESTAMP),
-            (2, 4, 'pirate,ship', 'https://example.com/pirate.png', CURRENT_TIMESTAMP),
-            (3, 5, 'monster,cute', 'https://example.com/cute_monster.jpg', CURRENT_TIMESTAMP),
-            (1, 2, 'mountain,alpine', 'https://example.com/alps.jpg', CURRENT_TIMESTAMP),
-            (4, 6, 'phone,gadget', 'https://example.com/new_phone.png', CURRENT_TIMESTAMP),
-            (5, 7, 'forest,sunrise', 'https://example.com/forest_sunrise.jpg', CURRENT_TIMESTAMP)
+            INSERT INTO Pins (user_id, board_id, title, tags, source_url, created_at) VALUES
+            (1, 1, 'Modern Brown Couch', 'couch,brown,modern', 'https://example.com/sofa.jpg', CURRENT_TIMESTAMP),
+            (1, 2, 'Beautiful Beach', 'beach,sand,sea', 'https://example.com/beach.jpg', CURRENT_TIMESTAMP),
+            (2, 3, 'T-Rex Dinosaur', 'dinosaur,trex', 'https://example.com/trex.png', CURRENT_TIMESTAMP),
+            (2, 4, 'Pirate Ship', 'pirate,ship', 'https://example.com/pirate.png', CURRENT_TIMESTAMP),
+            (3, 5, 'Cute Monster', 'monster,cute', 'https://example.com/cute_monster.jpg', CURRENT_TIMESTAMP),
+            (1, 2, 'Alpine Mountains', 'mountain,alpine', 'https://example.com/alps.jpg', CURRENT_TIMESTAMP),
+            (4, 6, 'New Smartphone', 'phone,gadget', 'https://example.com/new_phone.png', CURRENT_TIMESTAMP),
+            (5, 7, 'Forest Sunrise', 'forest,sunrise', 'https://example.com/forest_sunrise.jpg', CURRENT_TIMESTAMP)
         """)
 
-        # 4. Repins
+        # 4. Repins with titles
         cursor.execute("""
-            INSERT INTO Pins (user_id, board_id, original_pin_id, created_at) VALUES
-            (2, 4, 2, CURRENT_TIMESTAMP),
-            (3, 5, 3, CURRENT_TIMESTAMP),
-            (5, 7, 2, CURRENT_TIMESTAMP),
-            (4, 6, 3, CURRENT_TIMESTAMP)
+            INSERT INTO Pins (user_id, board_id, title, original_pin_id, created_at) VALUES
+            (2, 4, 'Beautiful Beach', 2, CURRENT_TIMESTAMP),
+            (3, 5, 'T-Rex Dinosaur', 3, CURRENT_TIMESTAMP),
+            (5, 7, 'Beautiful Beach', 2, CURRENT_TIMESTAMP),
+            (4, 6, 'T-Rex Dinosaur', 3, CURRENT_TIMESTAMP)
         """)
 
         # 5. Pictures (omit pin_id here only if you're adding AFTER pins are inserted & fetched)

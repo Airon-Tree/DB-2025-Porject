@@ -9,7 +9,7 @@
     {% if pins %}
         {% for pin in pins %}
             <div class="col-sm-6 col-md-4 col-lg-3 mb-4">
-                <div class="card h-100">
+                <div class="card pin-card h-100">
                     <a href="{{ url_for('frontend.view_pin', pin_id=pin.pin_id) }}">
                         {% if pin.image_url %}
                         <img src="{{ pin.image_url }}" class="card-img-top pin-image" alt="{{ pin.title }}">
@@ -20,7 +20,10 @@
                         {% endif %}
                     </a>
                     <div class="card-body">
-                        <h5 class="card-title">{{ pin.title if pin.title else "Untitled Pin" }}</h5>
+                        <h5 class="card-title pin-title">{{ pin.title if pin.title else "Untitled Pin" }}</h5>
+                        {% if pin.description %}
+                        <p class="card-text pin-description">{{ pin.description }}</p>
+                        {% endif %}
                     </div>
                     <div class="card-footer bg-white">
                         <small class="text-muted">

@@ -40,7 +40,13 @@ def index():
     # Get recent pins for display on homepage
     pins = run(
         """SELECT p.pin_id,
-                  COALESCE(p.source_url,'') AS title,
+                  COALESCE(p.title,
+                      CASE 
+                          WHEN p.tags IS NOT NULL AND p.tags != '' 
+                              THEN split_part(p.tags, ',', 1)
+                          ELSE COALESCE(p.source_url,'')
+                      END
+                  ) AS title,
                   p.tags AS description,
                   pic.uploaded_url AS image_url,
                   b.board_id, b.name AS board_name,
@@ -182,18 +188,24 @@ def view_board(board_id):
     if not board:
         abort(404)
 
-    # Get pins for this board
-    pins = run(
-        """SELECT p.pin_id,
-                 COALESCE(p.source_url,'') AS title,
-                 p.tags AS description,
-                 pic.uploaded_url AS image_url
-          FROM pins p
-          LEFT JOIN pictures pic ON pic.pin_id = p.pin_id
-          WHERE p.board_id=%s
-          ORDER BY p.created_at DESC""",
-        (board_id,)
-    )
+        # Get pins for this board
+        pins = run(
+            """SELECT p.pin_id,
+                     COALESCE(p.title,
+                         CASE 
+                             WHEN p.tags IS NOT NULL AND p.tags != '' 
+                                 THEN split_part(p.tags, ',', 1)
+                             ELSE COALESCE(p.source_url,'')
+                         END
+                     ) AS title,
+                     p.tags AS description,
+                     pic.uploaded_url AS image_url
+              FROM pins p
+              LEFT JOIN pictures pic ON pic.pin_id = p.pin_id
+              WHERE p.board_id=%s
+              ORDER BY p.created_at DESC""",
+            (board_id,)
+        )
 
     # Check if current user is following this board
     is_following = False
