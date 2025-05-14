@@ -40,13 +40,7 @@ def index():
     # Get recent pins for display on homepage
     pins = run(
         """SELECT p.pin_id,
-                  COALESCE(p.title,
-                      CASE 
-                          WHEN p.tags IS NOT NULL AND p.tags != '' 
-                              THEN split_part(p.tags, ',', 1)
-                          ELSE COALESCE(p.source_url,'')
-                      END
-                  ) AS title,
+                  COALESCE(p.title,'') AS title,
                   p.tags AS description,
                   pic.uploaded_url AS image_url,
                   b.board_id, b.name AS board_name,
@@ -189,23 +183,17 @@ def view_board(board_id):
         abort(404)
 
         # Get pins for this board
-        pins = run(
-            """SELECT p.pin_id,
-                     COALESCE(p.title,
-                         CASE 
-                             WHEN p.tags IS NOT NULL AND p.tags != '' 
-                                 THEN split_part(p.tags, ',', 1)
-                             ELSE COALESCE(p.source_url,'')
-                         END
-                     ) AS title,
-                     p.tags AS description,
-                     pic.uploaded_url AS image_url
-              FROM pins p
-              LEFT JOIN pictures pic ON pic.pin_id = p.pin_id
-              WHERE p.board_id=%s
-              ORDER BY p.created_at DESC""",
-            (board_id,)
-        )
+    pins = run(
+        """SELECT p.pin_id,
+            COALESCE(p.title,'') AS title,
+            p.tags AS description,
+            pic.uploaded_url AS image_url
+        FROM pins p
+        LEFT JOIN pictures pic ON pic.pin_id = p.pin_id
+        WHERE p.board_id=%s
+        ORDER BY p.created_at DESC""",
+        (board_id,)
+    )
 
     # Check if current user is following this board
     is_following = False
@@ -270,6 +258,7 @@ def create_pin(board_id):
         return redirect(url_for('frontend.index'))
 
     if request.method == 'POST':
+        title = request.form.get('title', '').strip()
         tags = request.form.get('tags', '')
         source_url = request.form.get('source_url', '')
 
@@ -310,10 +299,10 @@ def create_pin(board_id):
 
         # Create pin
         pin = run(
-            """INSERT INTO pins (user_id, board_id, tags, source_url)
-               VALUES (%s, %s, %s, %s)
+            """INSERT INTO pins (user_id, board_id, title, tags, source_url)
+               VALUES (%s, %s, %s, %s, %s)
                RETURNING pin_id""",
-            (session['uid'], board_id, tags, source_url),
+            (session['uid'], board_id, title, tags, source_url),
             fetchone=True,
             commit=True,
         )
