@@ -711,3 +711,71 @@ def accept_friend(fid):
     )
     flash("Friend request accepted ✅", "success")
     return redirect(url_for("frontend.friend_list"))
+
+
+# Delete pin
+@frontend_bp.route('/pins/<int:pin_id>/delete', methods=['POST'])
+@login_required
+def delete_pin(pin_id):
+    # First check if pin exists and belongs to the current user
+    pin = run(
+        """SELECT p.pin_id, p.board_id, b.user_id
+           FROM pins p
+           JOIN boards b ON p.board_id = b.board_id
+           WHERE p.pin_id = %s""",
+        (pin_id,),
+        fetchone=True
+    )
+
+    if not pin:
+        flash('Pin not found', 'error')
+        return redirect(url_for('frontend.index'))
+
+    # Check if user has permission (pin belongs to user)
+    if pin['user_id'] != session['uid']:
+        flash('You do not have permission to delete this pin', 'error')
+        return redirect(url_for('frontend.view_pin', pin_id=pin_id))
+
+    # Get the board_id before deletion for redirection
+    board_id = pin['board_id']
+
+    # Delete the pin (cascade will handle related records)
+    run(
+        "DELETE FROM pins WHERE pin_id = %s",
+        (pin_id,),
+        commit=True
+    )
+
+    flash('Pin deleted successfully', 'success')
+    return redirect(url_for('frontend.view_board', board_id=board_id))
+
+
+# Delete board
+@frontend_bp.route('/boards/<int:board_id>/delete', methods=['POST'])
+@login_required
+def delete_board(board_id):
+    # First check if board exists and belongs to the current user
+    board = run(
+        "SELECT board_id, user_id FROM boards WHERE board_id = %s",
+        (board_id,),
+        fetchone=True
+    )
+
+    if not board:
+        flash('Board not found', 'error')
+        return redirect(url_for('frontend.index'))
+
+    # Check if user has permission (board belongs to user)
+    if board['user_id'] != session['uid']:
+        flash('You do not have permission to delete this board', 'error')
+        return redirect(url_for('frontend.view_board', board_id=board_id))
+
+    # Delete the board (cascade will handle pins and other related records)
+    run(
+        "DELETE FROM boards WHERE board_id = %s",
+        (board_id,),
+        commit=True
+    )
+
+    flash('Board deleted successfully', 'success')
+    return redirect(url_for('frontend.user_profile', user_id=session['uid']))
