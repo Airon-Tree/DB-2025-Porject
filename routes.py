@@ -326,7 +326,7 @@ def create_pin(board_id):
 @frontend_bp.route('/pins/<int:pin_id>')
 def view_pin(pin_id):
     pin = run(
-        """SELECT p.pin_id, p.tags, p.source_url, p.created_at,
+        """SELECT p.pin_id, p.title, p.tags, p.source_url, p.created_at,
                  pic.uploaded_url AS image_url,
                  b.board_id, b.name AS board_name,
                  u.user_id, u.username
@@ -468,7 +468,7 @@ def repin(pin_id):
 
     # Get original pin information
     pin = run(
-        """SELECT p.tags, p.source_url, pic.uploaded_url
+        """SELECT p.tags, p.source_url, pic.uploaded_url, p.title
            FROM pins p
            LEFT JOIN pictures pic ON pic.pin_id = p.pin_id
            WHERE p.pin_id=%s""",
@@ -482,10 +482,10 @@ def repin(pin_id):
 
     # Create repin
     new_pin = run(
-        """INSERT INTO pins (user_id, board_id, tags, source_url, original_pin_id)
-           VALUES (%s, %s, %s, %s, %s)
+        """INSERT INTO pins (user_id, board_id, title, tags, source_url, original_pin_id)
+           VALUES (%s, %s, %s, %s, %s, %s)
            RETURNING pin_id""",
-        (session['uid'], target_board_id, pin['tags'], pin['source_url'], pin_id),
+        (session['uid'], target_board_id, pin['title'], pin['tags'], pin['source_url'], pin_id),
         fetchone=True,
         commit=True,
     )

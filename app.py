@@ -286,14 +286,28 @@ def seed_db_command():
         # 5. Pictures (omit pin_id here only if you're adding AFTER pins are inserted & fetched)
         cursor.execute("""
             INSERT INTO Pictures (pin_id, image_blob, original_url, uploaded_url, created_at) VALUES
-            (1, '\\xDEADBEEF', 'https://example.com/sofa.jpg', NULL, CURRENT_TIMESTAMP),
-            (2, '\\xDEADBEEF', 'https://example.com/beach.jpg', NULL, CURRENT_TIMESTAMP),
-            (3, '\\xDEADBEEF', 'https://example.com/trex.png', NULL, CURRENT_TIMESTAMP),
-            (4, '\\xDEADBEEF', 'https://example.com/pirate.png', NULL, CURRENT_TIMESTAMP),
-            (7, '\\xDEADBEEF', 'https://example.com/cute_monster.jpg', NULL, CURRENT_TIMESTAMP),
-            (8, '\\xDEADBEEF', 'https://example.com/alps.jpg', NULL, CURRENT_TIMESTAMP),
-            (9, '\\xDEADBEEF', 'https://example.com/new_phone.png', NULL, CURRENT_TIMESTAMP),
-            (10, '\\xDEADBEEF', 'https://example.com/forest_sunrise.jpg', NULL, CURRENT_TIMESTAMP)
+            (1, '\\xDEADBEEF', 'https://example.com/sofa.jpg', '/static/uploads/Modern Brown Couch.jpg', CURRENT_TIMESTAMP),
+            (2, '\\xDEADBEEF', 'https://example.com/beach.jpg', '/static/uploads/la_chiva_beach_puerto_rico.jpg', CURRENT_TIMESTAMP),
+            (3, '\\xDEADBEEF', 'https://example.com/trex.png', '/static/uploads/T-Rex Dinosaur.jpg', CURRENT_TIMESTAMP),
+            (4, '\\xDEADBEEF', 'https://example.com/pirate.png', '/static/uploads/Pirate Ship.jpg', CURRENT_TIMESTAMP),
+            (5, '\\xDEADBEEF', 'https://example.com/cute_monster.jpg', '/static/uploads/a16498dd28df490db3da74da7657a807_cat.jpg', CURRENT_TIMESTAMP),
+            (6, '\\xDEADBEEF', 'https://example.com/alps.jpg', '/static/uploads/Alpine Mountains.jpg', CURRENT_TIMESTAMP),
+            (7, '\\xDEADBEEF', 'https://example.com/new_phone.png', '/static/uploads/New Smartphone.jpg', CURRENT_TIMESTAMP),
+            (8, '\\xDEADBEEF', 'https://example.com/forest_sunrise.jpg', '/static/uploads/Forest Sunrise.jpg', CURRENT_TIMESTAMP)
+        """)
+
+        # 5‑b. Duplicate pictures for repins (pins with original_pin_id)
+        cursor.execute("""
+            INSERT INTO Pictures (pin_id, image_blob, original_url, uploaded_url, created_at)
+            SELECT  p.pin_id,
+                '\\xDEADBEEF',
+                pic.original_url,
+                pic.uploaded_url,
+                CURRENT_TIMESTAMP
+            FROM    pins p
+            JOIN    pictures pic ON pic.pin_id = p.original_pin_id
+            WHERE   p.original_pin_id IS NOT NULL
+                AND   NOT EXISTS (SELECT 1 FROM pictures x WHERE x.pin_id = p.pin_id);
         """)
 
         # 6. Friendships (omit friendship_id)
